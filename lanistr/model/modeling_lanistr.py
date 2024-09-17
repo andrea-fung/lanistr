@@ -89,7 +89,9 @@ class LANISTRMultiModalForPreTraining(nn.Module):
     self.mmm_loss = NegativeCosineSimilarityLoss
     self.target_token_idx = 0
 
-    self.mlm_head = mlm_head(text_encoder.config)
+    self.mlm_head = None
+    if self.args.text:
+        self.mlm_head = mlm_head(text_encoder.config)
     self.mlm_loss_fcn = nn.CrossEntropyLoss()  # -100 index = padding token
 
     self.image_encoder.embeddings.mask_token = nn.Parameter(
@@ -191,7 +193,12 @@ class LANISTRMultiModalForPreTraining(nn.Module):
     if self.args.image:
 
       pixel_values = batch['pixel_values'].clone()
-      bool_masked_pos = batch['bool_masked_pos']
+      ##[16, 1, 3, 224, 224] --> [16, 3, 224, 224]
+      pixel_values = pixel_values.squeeze()
+      bool_masked_pos = batch['bool_masked_positions']
+      ## [16, 1, 196] --> [16, 196]
+      bool_masked_pos = bool_masked_pos.squeeze()
+      #TODO - bool_masked_pos needs to be same # of dims as pixel_values [16, 1, 196]
       mim_output = self.image_encoder(
           pixel_values=pixel_values, bool_masked_pos=bool_masked_pos
       )
@@ -235,7 +242,7 @@ class LANISTRMultiModalForPreTraining(nn.Module):
       masked_embeds.append(mim_embeddings)
 
       image_features = self.image_encoder(
-          pixel_values=batch['pixel_values'], bool_masked_pos=None
+          pixel_values=batch['pixel_values'].squeeze(), bool_masked_pos=None
       )
       image_embeddings = self.image_proj(image_features.last_hidden_state)
       image_embeddings = F.normalize(image_embeddings, dim=1)

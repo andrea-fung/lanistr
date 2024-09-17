@@ -426,19 +426,24 @@ class TabNetPretraining(torch.nn.Module):
         embedded_x : embedded input
         obf_vars : which variable where obfuscated
     """
-    embedded_x = self.embedder(x)
+
+    embedded_x = self.embedder(x) #[B, 36] tensor --> #[B, 84]
     if self.training:
-      masked_x, masked_obf_vars = self.masker(embedded_x)
+      masked_x, masked_obf_vars = self.masker(embedded_x) #[B, 84] --> #[B, 84], [B, 84]
       # set prior of encoder with obf_mask
-      prior = 1 - masked_obf_vars
-      masked_steps_out, _ = self.encoder(masked_x, prior=prior)
+      prior = 1 - masked_obf_vars #[B, 84]
+      masked_steps_out, _ = self.encoder(masked_x, prior=prior) 
       res = self.decoder(masked_steps_out)
-      masked_last_hidden_state = torch.sum(masked_steps_out, dim=0)
-      masked_loss = self.compute_loss(res, embedded_x, masked_obf_vars)
+      # corrected?
+      masked_steps_out = torch.stack(masked_steps_out) #[6, 16, 64]
+      masked_last_hidden_state = torch.sum(masked_steps_out, dim=0) # --> [16, 64]
+      masked_loss = self.compute_loss(res, embedded_x, masked_obf_vars) 
 
       unmasked_steps_out, _ = self.encoder(embedded_x)
       unmasked_res = self.decoder(unmasked_steps_out)
       unmasked_obf_vars = torch.ones(embedded_x.shape).to(x.device)
+      # corrected?
+      unmasked_steps_out = torch.stack(unmasked_steps_out) #[6, 16, 64]
       unmasked_last_hidden_state = torch.sum(unmasked_steps_out, dim=0)
       unmasked_loss = self.compute_loss(
           unmasked_res, embedded_x, unmasked_obf_vars

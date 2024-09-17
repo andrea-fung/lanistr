@@ -25,7 +25,6 @@ from utils.parallelism_utils import is_main_process
 
 logger = logging.getLogger(__name__)
 
-
 def generate_loaders(
     args: omegaconf.DictConfig, dataset: torch.utils.data.Dataset
 ) -> Dict[str, torch.utils.data.DataLoader]:
@@ -38,23 +37,25 @@ def generate_loaders(
   Returns:
     A dictionary of data loaders
   """
+
   if args.task == 'pretrain':
     trainset = dataset['train']
-    if args.distributed:
-      train_sampler = torch.utils.data.distributed.DistributedSampler(
-          trainset, shuffle=True, drop_last=True
-      )
-    else:
-      train_sampler = None
+    sampler_AS = trainset.class_samplers() #TODO - what about for distributed gpu training
+    # if args.distributed:
+    #   train_sampler = torch.utils.data.distributed.DistributedSampler(
+    #       trainset, shuffle=True, drop_last=True
+    #   )
+    # else:
+    #   train_sampler = None
 
     train_dataloader = torch.utils.data.DataLoader(
         trainset,
         batch_size=args.train_batch_size,
-        shuffle=(train_sampler is None),
         num_workers=args.workers,
         pin_memory=True,
-        sampler=train_sampler,
+        sampler=sampler_AS,
     )
+
     if is_main_process():
       print(f'Number of training     examples: {len(trainset)}')
       logger.info('Number of training     examples: %d', len(trainset))
@@ -69,36 +70,35 @@ def generate_loaders(
     testset = dataset['test']
     valset = dataset['valid']
 
-    if args.distributed:
-      train_sampler = torch.utils.data.distributed.DistributedSampler(
-          trainset, shuffle=True, drop_last=True
-      )
-      valid_sampler = torch.utils.data.distributed.DistributedSampler(
-          valset, shuffle=False
-      )
-      test_sampler = None
-    else:
-      train_sampler = None
-      valid_sampler = None
-      test_sampler = None
+    # if args.distributed:
+    #   train_sampler = torch.utils.data.distributed.DistributedSampler(
+    #       trainset, shuffle=True, drop_last=True
+    #   )
+    #   valid_sampler = torch.utils.data.distributed.DistributedSampler(
+    #       valset, shuffle=False
+    #   )
+    #   test_sampler = None
+    # else:
+    #   train_sampler = None
+    #   valid_sampler = None
+    #   test_sampler = None
 
+    trainset = dataset['train']
+    sampler_AS = trainset.class_samplers() #TODO - what about for distributed gpu training
+
+    train_dataloader = torch.utils.data.DataLoader(
+        trainset,
+        batch_size=args.train_batch_size,
+        num_workers=args.workers,
+        pin_memory=True,
+        sampler=sampler_AS,
+    )
     valid_dataloader = torch.utils.data.DataLoader(
         valset,
         batch_size=args.eval_batch_size,
         shuffle=False,
         num_workers=args.workers,
-        pin_memory=True,
-        sampler=valid_sampler,
-    )
-
-    train_dataloader = torch.utils.data.DataLoader(
-        trainset,
-        batch_size=args.train_batch_size,
-        shuffle=(train_sampler is None),
-        num_workers=args.workers,
-        pin_memory=True,
-        sampler=train_sampler,
-        drop_last=True,
+        pin_memory=True
     )
 
     test_dataloader = torch.utils.data.DataLoader(
@@ -106,9 +106,7 @@ def generate_loaders(
         batch_size=args.test_batch_size,
         shuffle=False,
         num_workers=args.workers,
-        pin_memory=True,
-        sampler=test_sampler,
-        drop_last=True,
+        pin_memory=True
     )
     if is_main_process():
       print(f'Number of training     examples: {len(trainset)}')

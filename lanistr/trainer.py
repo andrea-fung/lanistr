@@ -14,6 +14,7 @@ limitations under the License.
 """
 
 import logging
+import wandb
 import os
 from typing import Mapping, Tuple
 
@@ -136,8 +137,11 @@ class Trainer:
       # train for one epoch
       train_results = self.pretrain_epoch(train_loader)
 
-      is_best = train_results["Loss"] < best_perf
-      best_perf = min(train_results["Loss"], best_perf)
+      if self.args.use_wandb:
+        wandb.log(train_results)
+
+      is_best = train_results["ptrLoss"] < best_perf
+      best_perf = min(train_results["ptrLoss"], best_perf)
       if is_best:
         best_epoch = epoch
 
@@ -182,7 +186,7 @@ class Trainer:
         "Pretraining ends for lanistr. Best epoch was at epoch=%d", best_epoch
     )
     print_only_by_main_process(
-        "Pretraining ends for lanistr. Best epoch was at epoch=%d", best_epoch
+        f"Pretraining ends for lanistr. Best epoch was at epoch={best_epoch}"
     )
 
   def pretrain_epoch(
@@ -235,7 +239,6 @@ class Trainer:
       # compute output
       output = self.model(inputs)
       loss = output.loss
-
       # compute gradient and do gradient update step
       if self.distributed:
         self.metrics["train"]["Loss"].update(loss)
@@ -244,6 +247,7 @@ class Trainer:
         self.metrics["train"]["MTM"].update(output.loss_mtm)
         self.metrics["train"]["MFM"].update(output.loss_mfm)
         self.metrics["train"]["MMM"].update(output.loss_mmm)
+
         self.optimizer.zero_grad()
         loss.backward()
       else:
@@ -263,7 +267,7 @@ class Trainer:
 
     results = {}
     for metric_name in self.metric_names:
-      results[metric_name] = self.metrics["train"][metric_name].compute()
+      results["ptr"+metric_name] = self.metrics["train"][metric_name].compute()
 
     return results
 
@@ -288,8 +292,11 @@ class Trainer:
       # evaluate on validation set
       valid_results = self.validate(valid_dataloader)
 
-      is_best = valid_results[self.args.perf_metric.upper()] > best_perf
-      best_perf = max(valid_results[self.args.perf_metric.upper()], best_perf)
+      if self.args.use_wandb:
+        wandb.log({**train_results, **valid_results})
+
+      is_best = valid_results["val"+self.args.perf_metric.upper()] > best_perf
+      best_perf = max(valid_results["val"+self.args.perf_metric.upper()], best_perf)
 
       print_performance_by_main_process(
           epoch,
@@ -389,7 +396,7 @@ class Trainer:
 
     results = {}
     for metric_name in self.metric_names:
-      results[metric_name] = self.metrics["train"][metric_name].compute()
+      results["tr"+metric_name] = self.metrics["train"][metric_name].compute()
 
     return results
 
@@ -459,9 +466,17 @@ class Trainer:
         else:
           self.metrics["test"]["Loss"].update(loss.sum().item())
 
+      if prefix == "Validation  ":
+        mode = "val"
+      else:
+        mode = "test"
+
       results = {}
       for metric_name in self.metric_names:
-        results[metric_name] = self.metrics["test"][metric_name].compute()
+        results[mode+metric_name] = self.metrics["test"][metric_name].compute()
+      
+      if self.args.use_wandb:
+        wandb.log(results)
 
       return results
 
@@ -478,17 +493,19 @@ class Trainer:
     self.model = load_checkpoint_with_module(self.model, best_checkpoint)
 
     results = self.validate(test_dataloader, prefix="TEST ---")
+    if self.args.use_wandb:
+      wandb.log(results)
     logger.info(
         "Final Test Perf: %f | Test Loss: %f",
-        results[self.args.perf_metric.upper()].item(),
-        results["Loss"],
+        results["test"+self.args.perf_metric.upper()].item(),
+        results["testLoss"],
     )
     for metric_name in self.metric_names:
-      print("Test Best Perf %s : %f", metric_name, results[metric_name].item())
+      print("Test Best Perf %s : %f", metric_name, results["test"+metric_name].item())
       logger.info(
-          "Test Best Perf %s : %f", metric_name, results[metric_name].item()
+          "Test Best Perf %s : %f", metric_name, results["test"+metric_name].item()
       )
 
-    self.m_t.update("test_perf", results[self.args.perf_metric.upper()].item())
-    self.m_t.update("test_loss", results["Loss"])
+    self.m_t.update("test_perf", results["test"+self.args.perf_metric.upper()].item())
+    self.m_t.update("test_loss", results["test"+"Loss"])
     self.m_t.save(self.args.output_dir)

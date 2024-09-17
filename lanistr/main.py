@@ -22,9 +22,11 @@ import pathlib
 import random
 import time
 import warnings
+import wandb
 
 from dataset.amazon.load_data import load_amazon
 from dataset.mimic_iv.load_data import load_mimic
+from dataset.aortic_stenosis.load_data import load_as
 import numpy as np
 import omegaconf
 import torch
@@ -41,6 +43,8 @@ from utils.parallelism_utils import setup_model
 
 warnings.filterwarnings("ignore")
 
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 logger = logging.getLogger(__name__)
@@ -53,7 +57,7 @@ def main() -> None:
       description="Multimodal Learning with LANISTR"
   )
   parser.add_argument(
-      "--config", type=str, default="./configs/mimic_pretrain.yaml"
+      "--config", type=str, default="./configs/aortic_stenosis_pretrain.yaml"
   )
   parser.add_argument(
       "--local_rank",
@@ -72,6 +76,7 @@ def main() -> None:
           "(use dots for.nested=overrides)"
       ),
   )
+
   flags = parser.parse_args()
   overrides = omegaconf.OmegaConf.from_cli(flags.overrides)
   config = omegaconf.OmegaConf.load(flags.config)
@@ -101,8 +106,15 @@ def main() -> None:
 
   if not args.ngpus_per_node:
     args.ngpus_per_node = torch.cuda.device_count()
-
+  
+  if args.use_wandb:
+    run = wandb.init(project="as_tab", entity="rcl_stroke", name = 'lanistr_finetune')
+  
   main_worker(args)
+
+  if args.use_wandb:
+    wandb.finish()
+
 
 
 def main_worker(args: omegaconf.DictConfig) -> None:
@@ -113,6 +125,8 @@ def main_worker(args: omegaconf.DictConfig) -> None:
     load_dataset = load_mimic
   elif args.dataset_name == "amazon":
     load_dataset = load_amazon
+  elif args.dataset_name == 'aortic_stenosis':
+    load_dataset = load_as
   else:
     raise NotImplementedError(f"{args.dataset_name} not implemented.")
 
@@ -154,8 +168,8 @@ def main_worker(args: omegaconf.DictConfig) -> None:
 
   # Load dataset
   tic = time.time()
-  print_only_by_main_process("Loading datasets ... ")
-  dataset = load_dataset(args, tokenizer)
+  print_only_by_main_process("Loading datasets ... ") 
+  dataset = load_dataset(args) 
   how_long(tic)
 
   # Load model and parallelize it
@@ -167,7 +181,7 @@ def main_worker(args: omegaconf.DictConfig) -> None:
 
   # Create the trainer and generate data loaders
   trainer = Trainer(model, args)
-  dataloaders = generate_loaders(args, dataset)
+  dataloaders = generate_loaders(args, dataset)  
 
   # Pretrain or finetune
   if args.task == "pretrain":
@@ -197,4 +211,8 @@ def main_worker(args: omegaconf.DictConfig) -> None:
 
 
 if __name__ == "__main__":
+  #run = wandb.init(project="as_tab", entity="rcl_stroke",config = args, name = 'lanistr_trial')
+
   main()
+
+  

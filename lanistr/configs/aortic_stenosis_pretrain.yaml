@@ -1,0 +1,112 @@
+seed: 2022
+
+# number of samples in training data to randomly subsample if greater than 0
+experiment_name: as_finetune_0.001
+output_dir: ./output_dir/as_finetune_0.001
+
+sub_samples: 0
+
+do_train: true
+do_test: true
+use_wandb: true
+
+dataset_name: aortic_stenosis
+category: disease_classification
+task: pretrain #pretrain/finetune
+
+# modalities presense
+image: true
+text: false
+tab: true
+time: false
+
+pretrain_resume: false
+pretrain_initialize_from_epoch: 0
+
+image_size: 224
+image_crop: 224
+mask_patch_size: 16
+model_patch_size: 16
+image_masking_ratio: 0.5
+
+frames: 16
+flip_rate: 0.3
+min_crop_ratio: 0.8
+hr_mean: 4.237
+hr_std: 0.1885
+
+scale_feats: true
+cat_cols: [] #TODO - why is this empty?
+
+# data_dir: ./data/APR2018/Office_Products
+# image_data_dir: ./data/APR2018/Office_Products/images
+img_path_dataset: /workspace/data/as_tom/annotations-all.csv
+tab_path_dataset: /workspace/data/as_tom/finetuned_df.csv
+dataset_root: /workspace/data/as_tom
+
+test_ratio: 0.01
+
+train_batch_size: 16
+eval_batch_size: 1
+test_batch_size: 1
+
+scheduler:
+  num_epochs: 20
+  warmup_epochs: 5
+
+optimizer:
+  learning_rate: 0.0001
+  weight_decay: 0.02
+  clip_value: 4.0
+
+# loss weights
+lambda_mim: 1.0
+lambda_mlm: 1.0
+lambda_mfm: 0.001 #0.01 #0.01
+lambda_mmm: 1.0
+
+# multimodal fusion encoder
+mm_encoder_trainable: true
+mm_hidden_dim: 2048
+mm_output_dim: 2048
+
+# simsiam pretraining projector and predictor
+projection_type: SimSiam
+predictor_hidden_dim: 512
+predictor_out_dim: 2048
+
+# unimodal encoders projection dim
+projection_dim: 768
+
+# text encoder
+tokenizer_name_or_path: bert-base-uncased
+text_encoder_name: bert-base-uncased
+max_token_length: 512
+text_encoder_pretrained: true
+text_encoder_trainable: true
+text_embedding_dim: 768
+mlm_probability: 0.15
+
+# image encoder
+image_encoder_name: google/vit-base-patch16-224
+image_encoder_pretrained: true
+image_encoder_trainable: true
+image_embedding_dim: 768
+
+# tabular encoder
+tabular_encoder_name: tabnet
+tabular_encoder_trainable: true
+tabular_output_dim: 768
+tabular_embedding_dim: 64
+tabular_pretraining_ratio: 0.15
+tabular_cat_emb_dim: 3
+tabular_mask_type: sparsemax
+tabular_n_d: 64
+tabular_n_a: 64
+
+# data parallelism
+multiprocessing_distributed: false
+dist_backend: nccl
+ngpus_per_node: 1
+world_size: 1
+workers: 10
